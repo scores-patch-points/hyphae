@@ -51,6 +51,7 @@ jobs:
           VITE_MATRIX_HOMESERVER: ${{ vars.VITE_MATRIX_HOMESERVER || 'https://hyphae.social' }}
           VITE_OWNER: ${{ vars.VITE_OWNER || 'hyphae' }}
           VITE_SUPPORT_EMAIL: ${{ vars.VITE_SUPPORT_EMAIL }}
+          VITE_PLATFORM_URL: ${{ vars.VITE_PLATFORM_URL || 'https://app.hyphae.social' }}
 
       # Fail the deploy if a placeholder survived the build, or the pages
       # Google needs are missing.
