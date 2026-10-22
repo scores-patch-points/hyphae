@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hyphae Mail — automations</title>
+<style>
+:root{--bg:#fff;--fg:#1b1b24;--mut:#6b6b7a;--line:#e3e1ee;--acc:#6b4fbb}
+@media(prefers-color-scheme:dark){:root{--bg:#15141b;--fg:#eceaf5;--mut:#9a98aa;--line:#2b293a;--acc:#a895f0}}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif}
+main{max-width:760px;margin:0 auto;padding:24px 16px}
+h1{font-size:1.4rem}h2{font-size:1.05rem;margin-top:2rem}
+.card{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:10px 0}
+input,textarea,select,button{font:inherit;color:inherit;background:transparent;border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+textarea,input[type=text]{width:100%;box-sizing:border-box}
+button{cursor:pointer}button.p{background:var(--acc);color:#fff;border-color:var(--acc)}
+.m{color:var(--mut);font-size:.9rem}
+</style></head><body><main>
+<h1>Hyphae Mail</h1>
+<div id="out"><p><a href="/auth/google"><button class="p">Continue with Google</button></a></p>
+<p class="m">Permission asked: send email as you. Hyphae Mail cannot read your mailbox.</p></div>
+<div id="app" hidden>
+  <p class="m">Connected as <b id="me"></b> · <button id="disc">Disconnect and delete my data</button></p>
+  <h2>Waiting for your approval</h2><div id="queue"></div>
+  <h2>Automations</h2><div id="autos"></div>
+  <h2>New automation</h2>
+  <div class="card">
+    <input type="text" id="n" placeholder="Name">
+    <textarea id="i" rows="3" placeholder="What should each email do? e.g. Thank them for yesterday's call and propose Thursday."></textarea>
+    <textarea id="r" rows="3" placeholder="One recipient per line: email, optional context after a comma"></textarea>
+    <p>Mode <select id="mode"><option value="approve">Ask me before sending</option><option value="auto">Send automatically</option></select>
+    Daily cap <input id="cap" type="number" value="25" min="1" max="100" style="width:5em">
+    Repeat every <input id="ev" type="number" placeholder="min" style="width:5em"> min</p>
+    <button class="p" id="add">Create</button>
+  </div>
+</div></main>
+<script>
+const H={"content-type":"application/json","x-requested-with":"hyphae"};
+const api=(p,o={})=>fetch("/api"+p,{...o,headers:H}).then(r=>r.json());
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+async function load(){
+  const me=await api("/me"); if(me.error) return;
+  out.hidden=true; app.hidden=false; document.getElementById("me").textContent=me.email;
+  const ds=await api("/drafts?status=pending");
+  queue.innerHTML=ds.length?ds.map(d=>`<div class="card" data-id="${d.id}"><div class="m">To ${esc(d.to_addr)}</div>
+    <input type="text" class="s" value="${esc(d.subject)}"><textarea class="b" rows="6">${esc(d.body)}</textarea>
+    <button class="p ok">Send</button> <button class="no">Discard</button></div>`).join(""):'<p class="m">Nothing waiting.</p>';
+  const as=await api("/automations");
+  autos.innerHTML=as.map(a=>`<div class="card"><b>${esc(a.name)}</b> <span class="m">${a.mode==="auto"?"sends automatically":"asks first"} · cap ${a.daily_cap}/day</span>
+    <button class="run" data-id="${a.id}">Run now</button></div>`).join("")||'<p class="m">None yet.</p>';
+}
+document.addEventListener("click",async e=>{
+  const c=e.target.closest(".card[data-id]");
+  if(e.target.classList.contains("ok")){await api(`/drafts/${c.dataset.id}/approve`,{method:"POST",body:JSON.stringify({subject:c.querySelector(".s").value,body:c.querySelector(".b").value})});load()}
+  if(e.target.classList.contains("no")){await api(`/drafts/${c.dataset.id}/reject`,{method:"POST",body:"{}"});load()}
+  if(e.target.classList.contains("run")){e.target.disabled=true;await api(`/automations/${e.target.dataset.id}/run`,{method:"POST",body:"{}"});load()}
+});
+add.onclick=async()=>{
+  const recipients=r.value.split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{const i=l.indexOf(",");return i<0?{email:l}:{email:l.slice(0,i).trim(),context:l.slice(i+1).trim()}});
+  const res=await api("/automations",{method:"POST",body:JSON.stringify({name:n.value,instructions:i.value,recipients,mode:mode.value,daily_cap:+cap.value,every_min:+ev.value||null})});
+  if(res.error)alert(res.error);else{n.value=i.value=r.value="";load()}
+};
+disc.onclick=async()=>{if(confirm("Revoke Google access and delete everything Hyphae Mail holds about you?")){await api("/disconnect",{method:"POST",body:"{}"});location.reload()}};
+load();
+</script></body></html>
